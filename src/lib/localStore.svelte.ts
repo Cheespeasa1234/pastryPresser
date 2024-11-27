@@ -1,5 +1,6 @@
 import BigNumber from "bignumber.js";
 import { onMount } from "svelte";
+import { Upgrade, Worker } from "./store.svelte";
 
 export interface StateManager<T> {
     get value(): T;
@@ -9,10 +10,10 @@ export interface StateManager<T> {
 export interface StateSerializer<T> {
     serialize(value: T): string;
     deserialize(serial: string): T;
-    defaultValue(): T;    
+    isUndefined(value: T): boolean; 
 }
 
-export function manage<T>(key: string, getter: () => T, setter: (v: T) => void, stateSerializer: StateSerializer<T>) {
+export function manage<T>(key: string, getter: () => T, setter: (v: T) => void, defaultValue: T, stateSerializer: StateSerializer<T>) {
     $inspect(getter()).with((t,v) => {
         if (t === "update") {
             localStorage.setItem(key, stateSerializer.serialize(getter()));
@@ -29,10 +30,15 @@ export function manage<T>(key: string, getter: () => T, setter: (v: T) => void, 
         };
         
         const fromStorage: string | null = localStorage.getItem(key);
-        if (fromStorage !== null) {
-            setter(stateSerializer.deserialize(fromStorage) || stateSerializer.defaultValue());
+        if (fromStorage) {
+            const deserialized = stateSerializer.deserialize(fromStorage);
+            if (stateSerializer.isUndefined(deserialized)) {
+                setter(defaultValue);
+            } else {
+                setter(deserialized);
+            }
         } else {
-            setter(stateSerializer.defaultValue());
+            setter(defaultValue);
         }
     });
 }
@@ -40,5 +46,17 @@ export function manage<T>(key: string, getter: () => T, setter: (v: T) => void, 
 export const bigNumberSerializer: StateSerializer<BigNumber> = {
     serialize: value => value.toFixed(3),
     deserialize: serial => BigNumber(serial),
-    defaultValue: () => BigNumber(0),
+    isUndefined: (value) => false,
+}
+
+export const upgradeArraySerializer: StateSerializer<Upgrade[]> = {
+    serialize: value => {
+        const ans = JSON.stringify(value);
+        return ans;
+    },
+    deserialize: serial => {
+        const ans = JSON.parse(serial);
+        return ans;
+    },
+    isUndefined: (value) => value.length === 0,
 }
